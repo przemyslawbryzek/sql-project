@@ -15,7 +15,7 @@ System do zarządzania rezerwacjami w biurze podróży, umożliwiający klientom
 
 ## Schemat bazy danych
 
-(Tutaj możesz wstawić diagram np. wygenerowany na podstawie poniższych tabel lub opisać relacje.)
+![Diagram Bazy Danych](https://github.com/przemyslawbryzek/sql-project/blob/main/Diagram.png)
 
 ## Opis poszczególnych tabel
 
