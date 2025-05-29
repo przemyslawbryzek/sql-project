@@ -218,7 +218,6 @@ CREATE TABLE "Payments" (
 
 ## Widoki
 
-Brak zdefiniowanych widoków.
 
 ## Procedury/funkcje
 
@@ -930,7 +929,6 @@ Brak zdefiniowanych widoków.
 
 ## Triggery
 
-Brak zdefiniowanych triggerów.
 
 ---
 
