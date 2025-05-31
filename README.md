@@ -288,6 +288,97 @@ CREATE TABLE "Payments" (
       RETURN ISNULL(@unit_price * @reserved_seats, 0) + @additions_price;
   END;
   ```
+- `get_client_reservations` - Zwraca tabelę ze wszystkimi rezerwacjami danego klienta.
+  ```sql
+  CREATE FUNCTION get_client_reservations (@client_id INT)
+  RETURNS TABLE
+  AS
+  RETURN
+  (
+      SELECT
+          R.reservation_id,
+          T.trip_name,
+          T.departure_date,
+          R.reserved_seats,
+          R.price AS reservation_price,
+          R.status AS reservation_status,
+          R.reservation_date
+      FROM Reservations R
+      JOIN Trips T ON R.trip_id = T.trip_id
+      WHERE R.client_id = @client_id
+  );
+  ```
+- `get_client_participants` - Zwraca tabelę ze wszystkimi uczestnikami powiązanymi z rezerwacjami danego klienta.
+  ```sql
+  CREATE FUNCTION get_client_participants (@client_id INT)
+  RETURNS TABLE
+  AS
+  RETURN
+  (
+      SELECT
+          P.first_name AS participant_first_name,
+          P.last_name AS participant_last_name,
+          T.trip_name,
+          R.reservation_id
+      FROM Participants P
+      JOIN Reservations R ON P.reservation_id = R.reservation_id
+      JOIN Trips T ON R.trip_id = T.trip_id
+      WHERE R.client_id = @client_id
+  );
+  ```
+- `get_client_payments` - Zwraca tabelę ze wszystkimi płatnościami dokonanymi przez danego klienta.
+  ```sql
+  CREATE FUNCTION get_client_payments (@client_id INT)
+  RETURNS TABLE
+  AS
+  RETURN
+  (
+      SELECT
+          P.payment_id,
+          R.reservation_id,
+          P.payment_date,
+          P.amount,
+          P.payment_method,
+          T.trip_name
+      FROM Payments P
+      JOIN Reservations R ON P.reservation_id = R.reservation_id
+      JOIN Trips T ON R.trip_id = T.trip_id
+      WHERE R.client_id = @client_id
+  );
+  ```
+- `get_available_trips` - Zwraca tabelę wszystkich wycieczek, które mają obecnie dostępne miejsca.
+  ```sql
+  CREATE FUNCTION get_available_trips ()
+  RETURNS TABLE
+  AS
+  RETURN
+  (
+      SELECT
+          T.trip_id,
+          T.trip_name,
+          T.departure_date,
+          T.price,
+          dbo.get_free_trip_seats(T.trip_id) AS remaining_seats
+      FROM Trips T
+      WHERE dbo.get_free_trip_seats(T.trip_id) > 0
+  );
+  ```
+- `get_trip_additions` - Zwraca tabelę dostępnych dodatków dla konkretnej wycieczki.
+  ```sql
+  CREATE FUNCTION get_trip_additions (@trip_id INT)
+  RETURNS TABLE
+  AS
+  RETURN
+  (
+      SELECT
+          A.addition_id,
+          A.addition_name,
+          A.price,
+          dbo.get_free_addition_seats(A.addition_id) AS remaining_seats
+      FROM Additions A
+      WHERE A.trip_id = @trip_id AND dbo.get_free_addition_seats(A.addition_id) > 0
+  );
+  ```
 
 ### Procedury
 - `add_addition_participant` - Dodaje uczestnika do zarezerwowanej dodatkowej atrakcji.
