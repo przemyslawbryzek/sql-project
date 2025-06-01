@@ -58,7 +58,7 @@ System służy do zarządzania rezerwacjami w biurze podróży. Pozwala klientom
 
 ## Schemat bazy danych
 
-![Diagram Bazy Danych](https://github.com/przemyslawbryzek/sql-project/blob/main/Diagram.png)
+![Diagram Bazy Danych](./Diagram.png)
 
 ## Opis poszczególnych tabel
 
