@@ -578,7 +578,7 @@ CREATE TABLE "Payments" (
       );
   END;
   ```
-- `cancel_incomplete_reservations` - Anuluje rezerwacje, które nie mają przypisanych wszystkich uczestników po określonym czasie.
+- `cancel_incomplete_reservations` - Anuluje rezerwacje, które nie mają przypisanych wszystkich uczestników po określonym czasie.(procedura uruchamiana przez SQL server Agent)
   ```sql
   CREATE PROCEDURE cancel_incomplete_reservations
   AS
@@ -721,7 +721,7 @@ CREATE TABLE "Payments" (
       END CATCH
   END;
   ```
-- `cancel_unpaid_reservations` - Anuluje rezerwacje, które nie zostały opłacone w terminie.
+- `cancel_unpaid_reservations` - Anuluje rezerwacje, które nie zostały opłacone w terminie.(procedura uruchamiana przez SQL server Agent)
   ```sql
   CREATE PROCEDURE cancel_unpaid_reservations
   AS
