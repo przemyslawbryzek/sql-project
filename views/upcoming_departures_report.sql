@@ -1,4 +1,4 @@
-CREATE VIEW vw_upcoming_departures_report AS
+CREATE VIEW upcoming_departures_report AS
 SELECT 
     t.trip_id,
     t.trip_name,

@@ -217,7 +217,255 @@ CREATE TABLE "Payments" (
 # 3. Widoki, procedury/funkcje, triggery
 
 ## Widoki
+- `additions_performance_report` - Analizuje popularność i rentowność dodatkowych atrakcji.
+    ```sql
+    CREATE VIEW additions_performance_report AS
+    SELECT 
+        a.addition_id,
+        a.addition_name,
+        a.price,
+        a.seat_limit,
+        t.trip_name,
+        COUNT(ar.addition_reservation_id) AS total_reservations,
+        SUM(ar.reserved_seats) AS total_seats_sold,
+        a.seat_limit - SUM(ar.reserved_seats) AS remaining_seats,
+        CAST(SUM(ar.reserved_seats) AS FLOAT) / a.seat_limit * 100 AS utilization_percentage,
+        SUM(ar.reserved_seats * ar.price) AS total_revenue,
+        AVG(CAST(ar.reserved_seats AS FLOAT)) AS avg_seats_per_reservation,
+        CAST(COUNT(ar.addition_reservation_id) AS FLOAT) / 
+        NULLIF((SELECT COUNT(r.reservation_id) 
+                FROM Reservations r 
+                WHERE r.trip_id = t.trip_id AND r.status <> 'cancelled'), 0) * 100 AS attachment_rate,
+        (SELECT COUNT(ap.participant_id) 
+        FROM Addition_participants ap 
+        WHERE ap.addition_reservation_id IN 
+            (SELECT ar2.addition_reservation_id 
+                FROM Addition_reservations ar2 
+                WHERE ar2.addition_id = a.addition_id)
+        ) AS total_participants,
+        CASE 
+            WHEN SUM(ar.reserved_seats) >= a.seat_limit THEN 'Wyprzedana'
+            WHEN SUM(ar.reserved_seats) >= a.seat_limit * 0.8 THEN 'Prawie pełna'
+            ELSE 'Dostępna'
+        END AS availability_status
+        FROM Additions a
+    JOIN Trips t ON a.trip_id = t.trip_id
+    LEFT JOIN Addition_reservations ar ON a.addition_id = ar.addition_id
+    LEFT JOIN Reservations r ON ar.reservation_id = r.reservation_id AND r.status <> 'cancelled'
+    GROUP BY a.addition_id, a.addition_name, a.price, a.seat_limit, t.trip_name, t.trip_id;
+    ```
+- `clients_public` - Udostępnia podstawowe informacje o klientach bez wrażliwych danych jak adres email czy pełny adres.
+    ```sql
+    CREATE VIEW clients_public AS
+    SELECT 
+        client_id,
+        client_type,
+        CASE 
+            WHEN client_type = 'individual' THEN first_name + ' ' + last_name
+            ELSE company_name
+        END AS display_name,
+        phone
+    FROM Clients;
+    ```
+ - `monthly_sales_report` - Agreguje miesięczne statystyki sprzedaży dla analiz trendów i planowania.
+    ```sql
+    CREATE VIEW monthly_sales_report AS
+    SELECT 
+        YEAR(r.reservation_date) AS year,
+        MONTH(r.reservation_date) AS month,
+        DATENAME(month, r.reservation_date) + ' ' + CAST(YEAR(r.reservation_date) AS VARCHAR) AS month_year,
+        COUNT(r.reservation_id) AS total_reservations,
+        SUM(r.reserved_seats) AS total_seats_sold,
+        COUNT(DISTINCT r.client_id) AS unique_clients,
+        SUM(dbo.get_total_reservation_cost(r.reservation_id)) AS total_revenue,
+        SUM(dbo.get_total_payment(r.reservation_id)) AS total_payments_received,
+        SUM(dbo.get_total_reservation_cost(r.reservation_id) - dbo.get_total_payment(r.reservation_id)) AS outstanding_balance,
+        AVG(CAST(dbo.get_total_reservation_cost(r.reservation_id) AS FLOAT)) AS avg_reservation_value,
+        AVG(CAST(r.reserved_seats AS FLOAT)) AS avg_seats_per_reservation
+    FROM Reservations r
+    WHERE r.status <> 'cancelled'
+        AND r.reservation_date >= DATEADD(year, -2, GETDATE())
+    GROUP BY YEAR(r.reservation_date), MONTH(r.reservation_date), DATENAME(month, r.reservation_date);
+    ```
+- `participants_with_trip` - Upraszcza dostęp do informacji o uczestnikach wraz z kontekstem wycieczki.
+    ```sql
+    CREATE VIEW participants_with_trip AS
+    SELECT 
+        p.participant_id,
+        p.first_name,
+        p.last_name,
+        p.first_name + ' ' + p.last_name AS full_name,
+        r.reservation_id,
+        r.reservation_date,
+        r.status AS reservation_status,
+        CASE 
+            WHEN c.client_type = 'individual' THEN c.first_name + ' ' + c.last_name
+            ELSE c.company_name
+        END AS client_name,
+        c.phone AS client_phone,
+        t.trip_id,
+        t.trip_name,
+        t.departure_date,
+        t.price AS trip_price,
+        DATEDIFF(day, GETDATE(), t.departure_date) AS days_until_departure
+    FROM Participants p
+    JOIN Reservations r ON p.reservation_id = r.reservation_id
+    JOIN Clients c ON r.client_id = c.client_id
+    JOIN Trips t ON r.trip_id = t.trip_id;
+    ```
+- `payments_report` - Analizuje przepływy finansowe według metod płatności i okresów.
+    ```sql
+    CREATE VIEW payments_report AS
+    SELECT 
+        YEAR(p.payment_date) AS year,
+        MONTH(p.payment_date) AS month,
+        DATENAME(month, p.payment_date) + ' ' + CAST(YEAR(p.payment_date) AS VARCHAR) AS month_year,
+        p.payment_method,
+        COUNT(p.payment_id) AS total_payments,
+        SUM(p.amount) AS total_amount,
+        AVG(p.amount) AS avg_payment_amount,
+        SUM(CASE WHEN p.amount < 0 THEN 1 ELSE 0 END) AS refund_count,
+        SUM(CASE WHEN p.amount < 0 THEN p.amount ELSE 0 END) AS total_refunds,
+        SUM(CASE WHEN p.amount > 0 THEN p.amount ELSE 0 END) AS total_incoming,
+        SUM(CASE WHEN p.amount > 0 THEN p.amount ELSE 0 END) + 
+        SUM(CASE WHEN p.amount < 0 THEN p.amount ELSE 0 END) AS net_payments
+    FROM Payments p
+    WHERE p.payment_date >= DATEADD(year, -2, GETDATE())
+    GROUP BY YEAR(p.payment_date), MONTH(p.payment_date), DATENAME(month, p.payment_date), p.payment_method;
+    ```
+- `reservations_full` - Kompleksowy widok łączący wszystkie kluczowe informacje o rezerwacji w jednym miejscu.
+    ```sql
+    CREATE VIEW reservations_full AS
+    SELECT 
+        r.reservation_id,
+        r.reservation_date,
+        r.status,
+        c.client_id,
+        CASE 
+            WHEN c.client_type = 'individual' THEN c.first_name + ' ' + c.last_name
+            ELSE c.company_name
+        END AS client_name,
+        c.client_type,
+        c.email,
+        c.phone,
+        t.trip_id,
+        t.trip_name,
+        t.departure_date,
+        r.reserved_seats,
+        r.price AS unit_price,
+        r.reserved_seats * r.price AS total_trip_cost,
+        dbo.get_total_reservation_cost(r.reservation_id) AS total_cost_with_additions,
+        dbo.get_total_payment(r.reservation_id) AS total_paid,
+        dbo.get_total_reservation_cost(r.reservation_id) - dbo.get_total_payment(r.reservation_id) AS balance_due,
+        CASE 
+            WHEN dbo.get_total_payment(r.reservation_id) >= dbo.get_total_reservation_cost(r.reservation_id) 
+            THEN 'Opłacone'
+            WHEN dbo.get_total_payment(r.reservation_id) > 0 
+            THEN 'Częściowo opłacone'
+            ELSE 'Nieopłacone'
+        END AS payment_status
+    FROM Reservations r
+    JOIN Clients c ON r.client_id = c.client_id
+    JOIN Trips t ON r.trip_id = t.trip_id;
+    ```
+ - `trip_popularity_report` - Analizuje popularność i rentowność poszczególnych wycieczek.
+    ```sql
+    CREATE VIEW trip_popularity_report AS
+    SELECT 
+        t.trip_id,
+        t.trip_name,
+        t.departure_date,
+        t.price,
+        t.seat_limit,
+        COUNT(r.reservation_id) AS total_reservations,
+        SUM(r.reserved_seats) AS total_seats_sold,
+        t.seat_limit - SUM(r.reserved_seats) AS remaining_seats,
+        CAST(SUM(r.reserved_seats) AS FLOAT) / t.seat_limit * 100 AS occupancy_percentage,
+        SUM(dbo.get_total_reservation_cost(r.reservation_id)) AS total_revenue,
+        AVG(CAST(dbo.get_total_reservation_cost(r.reservation_id) AS FLOAT)) AS avg_reservation_value,
+        (SELECT COUNT(DISTINCT ar.addition_id) 
+        FROM Addition_reservations ar 
+        JOIN Reservations r2 ON ar.reservation_id = r2.reservation_id 
+        WHERE r2.trip_id = t.trip_id
+        ) AS unique_additions_sold,
+        (SELECT SUM(ar.reserved_seats * ar.price) 
+        FROM Addition_reservations ar 
+        JOIN Reservations r2 ON ar.reservation_id = r2.reservation_id 
+        WHERE r2.trip_id = t.trip_id
+        ) AS additions_revenue,
+        CASE 
+            WHEN t.departure_date < GETDATE() THEN 'Zakończona'
+            WHEN SUM(r.reserved_seats) >= t.seat_limit THEN 'Wyprzedana'
+            WHEN SUM(r.reserved_seats) >= t.seat_limit * 0.8 THEN 'Prawie pełna'
+            ELSE 'Dostępna'
+        END AS trip_status
+    FROM Trips t
+    LEFT JOIN Reservations r ON t.trip_id = r.trip_id AND r.status <> 'cancelled'
+    GROUP BY t.trip_id, t.trip_name, t.departure_date, t.price, t.seat_limit;
+    ```
+- `trips_basic` - Pokazuje publiczne informacje o wycieczkach bez ujawniania wrażliwych danych biznesowych.
+    ```sql
+    CREATE VIEW trips_basic AS
+    SELECT 
+        trip_id,
+        trip_name,
+        departure_date,
+        price,
+        dbo.get_free_trip_seats(trip_id) AS available_seats,
+        CASE 
+            WHEN departure_date > GETDATE() THEN 'Dostępna'
+            ELSE 'Zakończona'
+        END AS status
+    FROM Trips
+    WHERE departure_date >= DATEADD(day, -30, GETDATE()); 
+    ```
+- `upcoming_departures_report` - Monitoring statusu przygotowań do nadchodzących wyjazdów.
+    ```sql
+    CREATE VIEW upcoming_departures_report AS
+    SELECT 
+        t.trip_id,
+        t.trip_name,
+        t.departure_date,
+        DATEDIFF(day, GETDATE(), t.departure_date) AS days_until_departure,
+        t.seat_limit,
+        SUM(r.reserved_seats) AS seats_sold,
+        t.seat_limit - SUM(r.reserved_seats) AS seats_available,
+        COUNT(r.reservation_id) AS total_reservations,
+        COUNT(DISTINCT r.client_id) AS unique_clients,
+        (SELECT COUNT(p.participant_id) 
+        FROM Participants p 
+        JOIN Reservations r2 ON p.reservation_id = r2.reservation_id 
+        WHERE r2.trip_id = t.trip_id AND r2.status <> 'cancelled'
+        ) AS participants_assigned,
+        SUM(r.reserved_seats) - (SELECT COUNT(p.participant_id) 
+                                FROM Participants p 
+                                JOIN Reservations r2 ON p.reservation_id = r2.reservation_id 
+                                WHERE r2.trip_id = t.trip_id AND r2.status <> 'cancelled'
+                            ) AS participants_missing,
 
+        SUM(dbo.get_total_reservation_cost(r.reservation_id)) AS total_revenue_expected,
+        SUM(dbo.get_total_payment(r.reservation_id)) AS total_payments_received,
+        SUM(dbo.get_total_reservation_cost(r.reservation_id) - dbo.get_total_payment(r.reservation_id)) AS outstanding_balance,
+        CASE 
+            WHEN DATEDIFF(day, GETDATE(), t.departure_date) <= 7 
+                AND SUM(dbo.get_total_reservation_cost(r.reservation_id) - dbo.get_total_payment(r.reservation_id)) > 0
+            THEN 'Problemy płatności'
+            WHEN DATEDIFF(day, GETDATE(), t.departure_date) <= 7 
+                AND SUM(r.reserved_seats) - (SELECT COUNT(p.participant_id) 
+                                            FROM Participants p 
+                                            JOIN Reservations r2 ON p.reservation_id = r2.reservation_id 
+                                            WHERE r2.trip_id = t.trip_id AND r2.status <> 'cancelled') > 0
+            THEN 'Brak uczestników'
+            WHEN DATEDIFF(day, GETDATE(), t.departure_date) <= 7
+            THEN 'Gotowa'
+            ELSE 'W przygotowaniu'
+        END AS readiness_status
+    FROM Trips t
+    LEFT JOIN Reservations r ON t.trip_id = r.trip_id AND r.status <> 'cancelled'
+    WHERE t.departure_date >= GETDATE()
+        AND t.departure_date <= DATEADD(day, 60, GETDATE())
+    GROUP BY t.trip_id, t.trip_name, t.departure_date, t.seat_limit;
+    ```
 
 ## Procedury/funkcje
 
@@ -1025,6 +1273,241 @@ CREATE TABLE "Payments" (
 
 # 4. Inne
 
-(Dodatkowe informacje: generowanie danych, uprawnienia itp.)
+## Dane do testowania danych dla Widkoków, Funkcji, Procedur i Triggerów
+```sql
+-- Add Trips
+INSERT INTO Trips (trip_name, departure_date, price, seat_limit) VALUES
+('Summer Adventure in the Mountains', '2025-07-15', 500.00, 30),
+('Coastal Escape Weekend', '2025-08-01', 350.00, 20),
+('Historical City Tour', '2025-09-10', 400.00, 25),
+('Skiing Holiday in Alps', '2026-01-20', 1200.00, 15),
+('Desert Safari Experience', '2025-11-05', 750.00, 18);
+
+-- Add Clients using procedure
+DECLARE @client_id_1 INT;
+DECLARE @client_id_2 INT;
+DECLARE @client_id_3 INT;
+DECLARE @client_id_4 INT;
+DECLARE @client_id_5 INT;
+
+EXEC add_client
+    @client_type = 'individual',
+    @first_name = 'John',
+    @last_name = 'Doe',
+    @email = 'john.doe@example.com',
+    @phone = '123-456-7890',
+    @address = '123 Main St, Anytown',
+    @client_id = @client_id_1 OUTPUT;
+
+EXEC add_client
+    @client_type = 'company',
+    @company_name = 'Tech Solutions Inc.',
+    @email = 'contact@techsolutions.com',
+    @phone = '987-654-3210',
+    @address = '456 Business Rd, Corp City',
+    @client_id = @client_id_2 OUTPUT;
+
+EXEC add_client
+    @client_type = 'individual',
+    @first_name = 'Alice',
+    @last_name = 'Smith',
+    @email = 'alice.smith@example.com',
+    @phone = '555-123-4567',
+    @address = '789 Oak Ave, Villagetown',
+    @client_id = @client_id_3 OUTPUT;
+
+EXEC add_client
+    @client_type = 'individual',
+    @first_name = 'Robert',
+    @last_name = 'Jones',
+    @email = 'robert.jones@example.com',
+    @phone = '555-987-6543',
+    @address = '101 Pine Ln, Hamletville',
+    @client_id = @client_id_4 OUTPUT;
+
+EXEC add_client
+    @client_type = 'company',
+    @company_name = 'Global Goods Ltd.',
+    @email = 'info@globalgoods.com',
+    @phone = '111-222-3333',
+    @address = '202 Commerce St, Tradeburg',
+    @client_id = @client_id_5 OUTPUT;
+
+
+-- Add Reservations using procedure
+DECLARE @reservation_id_1 INT;
+DECLARE @reservation_id_2 INT;
+DECLARE @reservation_id_3 INT;
+DECLARE @reservation_id_4 INT;
+DECLARE @reservation_id_5 INT;
+
+EXEC create_reservation
+    @client_id = @client_id_1,
+    @trip_id = 1, -- Summer Adventure in the Mountains
+    @reserved_seats = 2,
+    @reservation_id = @reservation_id_1 OUTPUT;
+
+EXEC create_reservation
+    @client_id = @client_id_2,
+    @trip_id = 2, -- Coastal Escape Weekend
+    @reserved_seats = 5,
+    @reservation_id = @reservation_id_2 OUTPUT;
+
+EXEC create_reservation
+    @client_id = @client_id_3,
+    @trip_id = 1, -- Summer Adventure in the Mountains
+    @reserved_seats = 1,
+    @reservation_id = @reservation_id_3 OUTPUT;
+
+EXEC create_reservation
+    @client_id = @client_id_4,
+    @trip_id = 3, -- Historical City Tour
+    @reserved_seats = 3,
+    @reservation_id = @reservation_id_4 OUTPUT;
+
+EXEC create_reservation
+    @client_id = @client_id_5,
+    @trip_id = 5, -- Desert Safari Experience
+    @reserved_seats = 10,
+    @reservation_id = @reservation_id_5 OUTPUT;
+-- Add Participants using procedure
+DECLARE @participant_id_1 INT, @participant_id_2 INT, @participant_id_3 INT, @participant_id_4 INT, @participant_id_5 INT;
+DECLARE @participant_id_6 INT, @participant_id_7 INT, @participant_id_8 INT, @participant_id_9 INT, @participant_id_10 INT;
+DECLARE @participant_id_11 INT, @participant_id_12 INT, @participant_id_13 INT, @participant_id_14 INT, @participant_id_15 INT;
+DECLARE @participant_id_16 INT, @participant_id_17 INT, @participant_id_18 INT, @participant_id_19 INT, @participant_id_20 INT;
+DECLARE @participant_id_21 INT;
+
+
+-- Reservation 1 (2 seats)
+EXEC add_participant @reservation_id = @reservation_id_1, @first_name = 'Michael', @last_name = 'Brown', @participant_id = @participant_id_1 OUTPUT;
+EXEC add_participant @reservation_id = @reservation_id_1, @first_name = 'Emily', @last_name = 'Davis', @participant_id = @participant_id_2 OUTPUT;
+
+-- Reservation 2 (5 seats)
+EXEC add_participant @reservation_id = @reservation_id_2, @first_name = 'David', @last_name = 'Wilson', @participant_id = @participant_id_3 OUTPUT;
+EXEC add_participant @reservation_id = @reservation_id_2, @first_name = 'Sarah', @last_name = 'Miller', @participant_id = @participant_id_4 OUTPUT;
+EXEC add_participant @reservation_id = @reservation_id_2, @first_name = 'James', @last_name = 'Garcia', @participant_id = @participant_id_5 OUTPUT;
+EXEC add_participant @reservation_id = @reservation_id_2, @first_name = 'Linda', @last_name = 'Rodriguez', @participant_id = @participant_id_6 OUTPUT;
+EXEC add_participant @reservation_id = @reservation_id_2, @first_name = 'Christopher', @last_name = 'Martinez', @participant_id = @participant_id_7 OUTPUT;
+
+-- Reservation 3 (1 seat)
+EXEC add_participant @reservation_id = @reservation_id_3, @first_name = 'Jessica', @last_name = 'Lee', @participant_id = @participant_id_8 OUTPUT;
+
+-- Reservation 4 (3 seats)
+EXEC add_participant @reservation_id = @reservation_id_4, @first_name = 'Daniel', @last_name = 'Harris', @participant_id = @participant_id_9 OUTPUT;
+EXEC add_participant @reservation_id = @reservation_id_4, @first_name = 'Ashley', @last_name = 'Clark', @participant_id = @participant_id_10 OUTPUT;
+EXEC add_participant @reservation_id = @reservation_id_4, @first_name = 'Kevin', @last_name = 'Lewis', @participant_id = @participant_id_11 OUTPUT;
+
+-- Reservation 5 (10 seats)
+EXEC add_participant @reservation_id = @reservation_id_5, @first_name = 'Laura', @last_name = 'Walker', @participant_id = @participant_id_12 OUTPUT;
+EXEC add_participant @reservation_id = @reservation_id_5, @first_name = 'Brian', @last_name = 'Hall', @participant_id = @participant_id_13 OUTPUT;
+EXEC add_participant @reservation_id = @reservation_id_5, @first_name = 'Nancy', @last_name = 'Allen', @participant_id = @participant_id_14 OUTPUT;
+EXEC add_participant @reservation_id = @reservation_id_5, @first_name = 'Paul', @last_name = 'Young', @participant_id = @participant_id_15 OUTPUT;
+EXEC add_participant @reservation_id = @reservation_id_5, @first_name = 'Karen', @last_name = 'King', @participant_id = @participant_id_16 OUTPUT;
+EXEC add_participant @reservation_id = @reservation_id_5, @first_name = 'Mark', @last_name = 'Wright', @participant_id = @participant_id_17 OUTPUT;
+EXEC add_participant @reservation_id = @reservation_id_5, @first_name = 'Betty', @last_name = 'Scott', @participant_id = @participant_id_18 OUTPUT;
+EXEC add_participant @reservation_id = @reservation_id_5, @first_name = 'Steven', @last_name = 'Green', @participant_id = @participant_id_19 OUTPUT;
+EXEC add_participant @reservation_id = @reservation_id_5, @first_name = 'Donna', @last_name = 'Adams', @participant_id = @participant_id_20 OUTPUT;
+EXEC add_participant @reservation_id = @reservation_id_5, @first_name = 'George', @last_name = 'Baker', @participant_id = @participant_id_21 OUTPUT;
+
+-- Add Additions
+INSERT INTO Additions (trip_id, addition_name, price, seat_limit) VALUES
+(1, 'Mountain Bike Rental', 50.00, 10), -- For Summer Adventure
+(1, 'Guided Hiking Tour', 30.00, 15),    -- For Summer Adventure
+(2, 'Surfboard Rental', 40.00, 8),       -- For Coastal Escape
+(2, 'Beach Yoga Session', 25.00, 10),    -- For Coastal Escape
+(3, 'Museum Pass', 20.00, 20),           -- For Historical City Tour
+(3, 'Private Guide', 100.00, 5),         -- For Historical City Tour
+(4, 'Ski Equipment Rental', 80.00, 10),  -- For Skiing Holiday
+(4, 'Snowboarding Lessons', 120.00, 5),  -- For Skiing Holiday
+(5, 'Camel Ride', 60.00, 12),            -- For Desert Safari
+(5, 'Dune Bashing', 90.00, 10);           -- For Desert Safari
+
+
+-- Add Addition Reservations using procedure
+DECLARE @add_res_id_1 INT, @add_res_id_2 INT, @add_res_id_3 INT, @add_res_id_4 INT, @add_res_id_5 INT;
+DECLARE @add_res_id_6 INT, @add_res_id_7 INT;
+
+-- Reservation 1 (Summer Adventure, 2 people)
+-- Michael and Emily rent mountain bikes
+EXEC create_addition_reservation @reservation_id = @reservation_id_1, @addition_id = 1, @reserved_seats = 2, @addition_reservation_id = @add_res_id_1 OUTPUT;
+-- Michael also goes on a guided hiking tour
+EXEC create_addition_reservation @reservation_id = @reservation_id_1, @addition_id = 2, @reserved_seats = 1, @addition_reservation_id = @add_res_id_2 OUTPUT;
+
+-- Reservation 2 (Coastal Escape, 5 people)
+-- 3 people rent surfboards
+EXEC create_addition_reservation @reservation_id = @reservation_id_2, @addition_id = 3, @reserved_seats = 3, @addition_reservation_id = @add_res_id_3 OUTPUT;
+-- 2 people do beach yoga
+EXEC create_addition_reservation @reservation_id = @reservation_id_2, @addition_id = 4, @reserved_seats = 2, @addition_reservation_id = @add_res_id_4 OUTPUT;
+
+-- Reservation 4 (Historical City Tour, 3 people)
+-- All 3 get museum passes
+EXEC create_addition_reservation @reservation_id = @reservation_id_4, @addition_id = 5, @reserved_seats = 3, @addition_reservation_id = @add_res_id_5 OUTPUT;
+
+-- Reservation 5 (Desert Safari, 10 people)
+-- 5 people go for a camel ride
+EXEC create_addition_reservation @reservation_id = @reservation_id_5, @addition_id = 9, @reserved_seats = 5, @addition_reservation_id = @add_res_id_6 OUTPUT;
+-- All 10 go dune bashing
+EXEC create_addition_reservation @reservation_id = @reservation_id_5, @addition_id = 10, @reserved_seats = 10, @addition_reservation_id = @add_res_id_7 OUTPUT;
+
+-- Add Addition Participants using procedure
+
+-- For @add_res_id_1 (Mountain Bike Rental for Reservation 1, 2 seats)
+EXEC add_addition_participant @addition_reservation_id = @add_res_id_1, @participant_id = @participant_id_1; -- Michael
+EXEC add_addition_participant @addition_reservation_id = @add_res_id_1, @participant_id = @participant_id_2; -- Emily
+
+-- For @add_res_id_2 (Guided Hiking Tour for Reservation 1, 1 seat)
+EXEC add_addition_participant @addition_reservation_id = @add_res_id_2, @participant_id = @participant_id_1; -- Michael
+
+-- For @add_res_id_3 (Surfboard Rental for Reservation 2, 3 seats)
+EXEC add_addition_participant @addition_reservation_id = @add_res_id_3, @participant_id = @participant_id_3; -- David
+EXEC add_addition_participant @addition_reservation_id = @add_res_id_3, @participant_id = @participant_id_4; -- Sarah
+EXEC add_addition_participant @addition_reservation_id = @add_res_id_3, @participant_id = @participant_id_5; -- James
+
+-- For @add_res_id_4 (Beach Yoga Session for Reservation 2, 2 seats)
+EXEC add_addition_participant @addition_reservation_id = @add_res_id_4, @participant_id = @participant_id_6; -- Linda
+EXEC add_addition_participant @addition_reservation_id = @add_res_id_4, @participant_id = @participant_id_7; -- Christopher
+
+-- For @add_res_id_5 (Museum Pass for Reservation 4, 3 seats)
+EXEC add_addition_participant @addition_reservation_id = @add_res_id_5, @participant_id = @participant_id_9;  -- Daniel
+EXEC add_addition_participant @addition_reservation_id = @add_res_id_5, @participant_id = @participant_id_10; -- Ashley
+EXEC add_addition_participant @addition_reservation_id = @add_res_id_5, @participant_id = @participant_id_11; -- Kevin
+
+-- For @add_res_id_6 (Camel Ride for Reservation 5, 5 seats)
+EXEC add_addition_participant @addition_reservation_id = @add_res_id_6, @participant_id = @participant_id_12; -- Laura
+EXEC add_addition_participant @addition_reservation_id = @add_res_id_6, @participant_id = @participant_id_13; -- Brian
+EXEC add_addition_participant @addition_reservation_id = @add_res_id_6, @participant_id = @participant_id_14; -- Nancy
+EXEC add_addition_participant @addition_reservation_id = @add_res_id_6, @participant_id = @participant_id_15; -- Paul
+EXEC add_addition_participant @addition_reservation_id = @add_res_id_6, @participant_id = @participant_id_16; -- Karen
+
+-- For @add_res_id_7 (Dune Bashing for Reservation 5, 10 seats)
+EXEC add_addition_participant @addition_reservation_id = @add_res_id_7, @participant_id = @participant_id_12; -- Laura
+EXEC add_addition_participant @addition_reservation_id = @add_res_id_7, @participant_id = @participant_id_13; -- Brian
+EXEC add_addition_participant @addition_reservation_id = @add_res_id_7, @participant_id = @participant_id_14; -- Nancy
+EXEC add_addition_participant @addition_reservation_id = @add_res_id_7, @participant_id = @participant_id_15; -- Paul
+EXEC add_addition_participant @addition_reservation_id = @add_res_id_7, @participant_id = @participant_id_16; -- Karen
+EXEC add_addition_participant @addition_reservation_id = @add_res_id_7, @participant_id = @participant_id_17; -- Mark
+EXEC add_addition_participant @addition_reservation_id = @add_res_id_7, @participant_id = @participant_id_18; -- Betty
+EXEC add_addition_participant @addition_reservation_id = @add_res_id_7, @participant_id = @participant_id_19; -- Steven
+EXEC add_addition_participant @addition_reservation_id = @add_res_id_7, @participant_id = @participant_id_20; -- Donna
+EXEC add_addition_participant @addition_reservation_id = @add_res_id_7, @participant_id = @participant_id_21; -- George
+
+-- Add Payments using procedure
+-- Some reservations will be fully paid, some partially, some not at all.
+-- Payments will include costs for additions.
+
+-- Reservation 1: Fully paid (Trip: 2 * 500 = 1000) + (Additions: Bike 2*50=100, Hike 1*30=30) = 1130
+EXEC add_payment @reservation_id = @reservation_id_1, @amount = 1130.00, @payment_method = 'Credit Card', @payment_date = '2025-06-01';
+
+-- Reservation 2: Partially paid (Trip: 5 * 350 = 1750) + (Additions: Surf 3*40=120, Yoga 2*25=50) = 1920. Paid 1000.
+EXEC add_payment @reservation_id = @reservation_id_2, @amount = 1000.00, @payment_method = 'Bank Transfer', @payment_date = '2025-06-02';
+
+-- Reservation 3: No payment yet (Trip: 1 * 500 = 500). No additions.
+
+-- Reservation 4: Fully paid (Trip: 3 * 400 = 1200) + (Additions: Museum 3*20=60) = 1260
+EXEC add_payment @reservation_id = @reservation_id_4, @amount = 1260.00, @payment_method = 'Credit Card', @payment_date = '2025-06-04';
+
+-- Reservation 5: Partially paid (Trip: 10 * 750 = 7500) + (Additions: Camel 5*60=300, Dune 10*90=900) = 8700. Paid 5000.
+EXEC add_payment @reservation_id = @reservation_id_5, @amount = 5000.00, @payment_method = 'Company Account', @payment_date = '2025-06-05';
+```
 
 ---

@@ -1,4 +1,4 @@
-CREATE VIEW vw_monthly_sales_report AS
+CREATE VIEW monthly_sales_report AS
 SELECT 
     YEAR(r.reservation_date) AS year,
     MONTH(r.reservation_date) AS month,
