@@ -7,7 +7,50 @@
 
 # 1. Wymagania i funkcje systemu
 
-System do zarządzania rezerwacjami w biurze podróży, umożliwiający klientom rezerwację wycieczek i dodatków, a pracownikom zarządzanie ofertą i rezerwacjami.
+## Opis ogólny
+System służy do zarządzania rezerwacjami w biurze podróży. Pozwala klientom na rezerwowanie wycieczek oraz powiązanych dodatków (np. atrakcje, sprzęt, usługi), a pracownikom biura na kompleksowe zarządzanie ofertą, klientami oraz obsługę rezerwacji i płatności.
+
+---
+
+## Funkcjonalności dla klientów:
+- Przeglądanie dostępnych wycieczek i dodatków (np. atrakcje, sprzęt).
+- Składanie rezerwacji na wybraną wycieczkę (wskazanie liczby miejsc).
+- Dodawanie dodatków do rezerwacji (np. wynajem sprzętu, udział w dodatkowych atrakcjach).
+- Anulowanie rezerwacji i zwrot pieniędz.
+- Przypisywanie uczestników do rezerwacji i do wybranych dodatków.
+- Podgląd statusu własnych rezerwacji, płatności i historii wyjazdów.
+
+---
+
+## Funkcjonalności dla pracowników biura podróży:
+- Dodawanie i edycja oferty wycieczek (nazwa, data, cena, limit miejsc).
+- Zarządzanie dodatkami do wycieczek (np. nowe atrakcje, limity, ceny).
+- Podgląd oraz szczegółowa obsługa wszystkich rezerwacji — możliwość modyfikacji, anulowania, przypisywania uczestników.
+- Rejestracja i obsługa płatności, generowanie raportów rozliczeniowych.
+- Kontrola dostępności miejsc (synchronizacja liczby uczestników z limitem).
+- Raporty sprzedaży (np. miesięczne, roczne), analiza popularności wycieczek i dodatków.
+- Obsługa zwrotów i anulacji (z uwzględnieniem terminów i polityki zwrotów).
+
+---
+
+## Wymagania niefunkcjonalne:
+- Spójność danych (np. nie można dodać uczestnika ponad liczbę zarezerwowanych miejsc).
+- Automatyczne anulowanie nieopłaconych lub niekompletnych rezerwacji przed wyjazdem.
+- Przejrzysty, zgodny z RODO podgląd danych klientów (np. osobne widoki bez wrażliwych danych).
+- Rozszerzalność rozwiązania (możliwość dodania nowych typów atrakcji, raportów, kanałów płatności).
+- Bezpieczna rejestracja płatności i zwrotów (np. historia transakcji, saldo rezerwacji).
+- Przejrzysty podział ról użytkowników (klient/pracownik biura).
+
+---
+
+## Procesy biznesowe:
+1. Klient przegląda ofertę i wybiera wycieczkę.
+2. Składa rezerwację, określając liczbę uczestników.
+3. Dodaje wybrane dodatki do rezerwacji.
+4. Przypisuje uczestników do rezerwacji oraz do konkretnych dodatków.
+5. Opłaca rezerwację.
+6. System monitoruje kompletność uczestników i płatności — w razie braków automatycznie anuluje rezerwację.
+7. Pracownik ma pełny wgląd i możliwość interwencji na każdym etapie (np. ręczna edycja, zwroty, generowanie raportów).
 
 ---
 
