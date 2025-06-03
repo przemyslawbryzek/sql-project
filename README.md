@@ -1316,7 +1316,7 @@ CREATE TABLE "Payments" (
 
 # 4. Inne
 
-## Dane do testowania Widkoków, Funkcji, Procedur i Triggerów
+## Dane do testowania Widoków, Funkcji, Procedur i Triggerów
 ```sql
 -- Add Trips
 INSERT INTO Trips (trip_name, departure_date, price, seat_limit) VALUES
