@@ -62,6 +62,41 @@ System służy do zarządzania rezerwacjami w biurze podróży. Pozwala klientom
 
 ## Opis poszczególnych tabel
 
+### Tabela: Countries
+- Opis: Przechowuje informacje o krajach.
+
+| Nazwa atrybutu           | Typ           | Opis/Uwagi                    |
+| ------------------------ | ------------- | ----------------------------- |
+| name                     | VARCHAR(100)  | Nazwa kraju                   |
+| alpha_2                  | CHAR(2)       | Klucz główny                  |
+| alpha_3                  | CHAR(3)       | 3 literowy kod kraju          |
+| country_code             | CHAR(3)       | 3 literowy kod kraju          |
+| iso_3166_2               | VARCHAR(20)   | alpha_2 w formacie iso_3166_2 |
+| region                   | VARCHAR(50)   | Kontynent                     |
+| sub_region               | VARCHAR(50)   | Podregion                     |
+| intermediate_region      | VARCHAR(50)   | Region pośredni               |
+| region_code              | CHAR(3)       | Kod kontynentu                |
+| sub_region_code          | CHAR(3)       | Kod podregionu                |
+| intermediate_region_code | CHAR(3)       | Kod regionu pośredniego       |
+
+```sql
+CREATE TABLE Countries (
+    name VARCHAR(100) NOT NULL,
+    alpha_2 CHAR(2) PRIMARY KEY, 
+    alpha_3 CHAR(3) NOT NULL,
+    country_code CHAR(3) NOT NULL,
+    iso_3166_2 VARCHAR(20) NOT NULL,
+    region VARCHAR(50),
+    sub_region VARCHAR(50),
+    intermediate_region VARCHAR(50),
+    region_code CHAR(3),
+    sub_region_code CHAR(3),
+    intermediate_region_code CHAR(3)
+);
+```
+
+---
+
 ### Tabela: Clients
 - Opis: Przechowuje dane klientów (osoby indywidualne lub firmy).
 
@@ -94,13 +129,14 @@ CREATE TABLE "Clients" (
 ### Tabela: Trips
 - Opis: Przechowuje informacje o dostępnych wycieczkach.
 
-| Nazwa atrybutu   | Typ           | Opis/Uwagi         |
-| ---------------- | ------------- | ------------------ |
-| trip_id          | INT           | Klucz główny       |
-| trip_name        | VARCHAR(100)  | Nazwa wycieczki    |
-| departure_date   | DATE          | Data wyjazdu       |
-| price            | DECIMAL(10,2) | Cena               |
-| seat_limit       | INT           | Limit miejsc       |
+| Nazwa atrybutu   | Typ           | Opis/Uwagi              |
+| ---------------- | ------------- | ----------------------- |
+| trip_id          | INT           | Klucz główny            |
+| trip_name        | VARCHAR(100)  | Nazwa wycieczki         |
+| departure_date   | DATE          | Data wyjazdu            |
+| price            | DECIMAL(10,2) | Cena                    |
+| seat_limit       | INT           | Limit miejsc            |
+| country_code     | CHAR(2)       | Klucz obcy do Countries |
 
 ```sql
 CREATE TABLE "Trips" (
@@ -108,7 +144,9 @@ CREATE TABLE "Trips" (
     "trip_name" VARCHAR(100),
     "departure_date" DATE,
     "price" DECIMAL(10, 2),
-    "seat_limit" INT
+    "seat_limit" INT,
+    "country_code" CHAR(2),
+    FOREIGN KEY ("country_code") REFERENCES Countries("alpha_2")
 );
 ```
 

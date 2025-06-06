@@ -14,6 +14,9 @@ SELECT
     t.trip_id,
     t.trip_name,
     t.departure_date,
+    ct.name,
+    ct.region,
+    ct.sub_region,
     r.reserved_seats,
     r.price AS unit_price,
     r.reserved_seats * r.price AS total_trip_cost,
@@ -29,4 +32,5 @@ SELECT
     END AS payment_status
 FROM Reservations r
 JOIN Clients c ON r.client_id = c.client_id
-JOIN Trips t ON r.trip_id = t.trip_id;
+JOIN Trips t ON r.trip_id = t.trip_id
+JOIN Countries ct on t.country_code=ct.alpha_2;

@@ -1,3 +1,16 @@
+CREATE TABLE Countries (
+    name VARCHAR(100) NOT NULL,
+    alpha_2 CHAR(2) PRIMARY KEY, 
+    alpha_3 CHAR(3) NOT NULL,
+    country_code CHAR(3) NOT NULL,
+    iso_3166_2 VARCHAR(20) NOT NULL,
+    region VARCHAR(50),
+    sub_region VARCHAR(50),
+    intermediate_region VARCHAR(50),
+    region_code CHAR(3),
+    sub_region_code CHAR(3),
+    intermediate_region_code CHAR(3)
+);
 CREATE TABLE "Clients" (
     "client_id" INT IDENTITY(1,1) PRIMARY KEY,
     "client_type" VARCHAR(20) CHECK (client_type IN ('individual', 'company')),
@@ -14,7 +27,9 @@ CREATE TABLE "Trips" (
     "trip_name" VARCHAR(100),
     "departure_date" DATE,
     "price" DECIMAL(10, 2),
-    "seat_limit" INT
+    "seat_limit" INT,
+    "country_code" CHAR(2),
+    FOREIGN KEY ("country_code") REFERENCES Countries("alpha_2")
 );
 
 CREATE TABLE "Reservations" (

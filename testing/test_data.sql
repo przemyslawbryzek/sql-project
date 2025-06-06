@@ -1,10 +1,10 @@
 -- Add Trips
-INSERT INTO Trips (trip_name, departure_date, price, seat_limit) VALUES
-('Summer Adventure in the Mountains', '2025-07-15', 500.00, 30),
-('Coastal Escape Weekend', '2025-08-01', 350.00, 20),
-('Historical City Tour', '2025-09-10', 400.00, 25),
-('Skiing Holiday in Alps', '2026-01-20', 1200.00, 15),
-('Desert Safari Experience', '2025-11-05', 750.00, 18);
+INSERT INTO Trips (trip_name,country_code, departure_date, price, seat_limit) VALUES
+('Summer Adventure in the Mountains','PL', '2025-07-15', 500.00, 30),
+('Coastal Escape Weekend','ES', '2025-08-01', 350.00, 20),
+('Historical City Tour','AT', '2025-09-10', 400.00, 25),
+('Skiing Holiday in Alps','IT', '2026-01-20', 1200.00, 15),
+('Desert Safari Experience','EG','2025-11-05', 750.00, 18);
 
 -- Add Clients using procedure
 DECLARE @client_id_1 INT;
